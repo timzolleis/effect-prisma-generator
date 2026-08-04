@@ -12,6 +12,7 @@
   ],
   "scripts": {
     "build": "tsc && chmod +x dist/index.js",
+    "prepare": "npm run build",
     "test": "tsx scripts/runTests.ts",
     "format": "prettier --write . && eslint . --fix",
     "format:check": "prettier --check .",
