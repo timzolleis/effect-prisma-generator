@@ -1,8 +1,9 @@
 import { describe, expect, it } from "@effect/vitest";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import { Data, Effect, Layer } from "effect";
+import { Data, Effect, Layer, Schema } from "effect";
 import * as fs from "fs";
-import { PrismaClient } from "./prisma/generated/client";
+import { Prisma, PrismaClient } from "./prisma/generated/client";
+import { ScalarsRow } from "./prisma/generated/schemas";
 import {
   layerFromPrismaClient,
   PrismaClientService,
@@ -444,6 +445,64 @@ describe("Prisma Effect Generator", () => {
       ),
     ),
   );
+
+  it.effect("row schema decodes what the client actually returns", () =>
+    Effect.gen(function* () {
+      const prisma = yield* PrismaService;
+      const row = yield* prisma.scalars.create({
+        data: {
+          text: "row",
+          flag: true,
+          num: 1.5,
+          dec: new Prisma.Decimal("12.34"),
+          big: 9007199254740993n,
+          bytes: new Uint8Array([1, 2, 3]),
+          json: { nested: [1, "two"] },
+        },
+      });
+
+      // decodeUnknownSync(schema)(input) works on both effect majors, so the
+      // same call exercises the v3 and v4 emission legs.
+      const decoded = Schema.decodeUnknownSync(ScalarsRow)(row);
+      expect(decoded.text).toBe("row");
+      expect(decoded.dec).toBeInstanceOf(Prisma.Decimal);
+      expect(decoded.big).toBe(9007199254740993n);
+      expect(decoded.bytes).toBeInstanceOf(Uint8Array);
+      expect(decoded.at).toBeInstanceOf(Date);
+      expect(decoded.optText).toBeNull();
+
+      // A wrongly-typed field must fail the decode.
+      expect(() =>
+        Schema.decodeUnknownSync(ScalarsRow)({ ...row, at: "not-a-date" }),
+      ).toThrow();
+
+      yield* prisma.scalars.delete({ where: { id: row.id } });
+    }).pipe(Effect.provide(MainLayer)),
+  );
+
+  it("emits enum schemas and skips relations and Unsupported fields", () => {
+    const generated = fs.readFileSync(
+      "postgres-schemas/generated/schemas/schemas.ts",
+      "utf-8",
+    );
+    // "Schema.Literal" matches both the v3 (Literal) and v4 (Literals) emission.
+    expect(generated).toMatch(/export const Role = Schema\.Literals?\(/);
+    expect(generated).toContain("role: Role,");
+    expect(generated).toContain("altRole: Schema.NullOr(Role),");
+    expect(generated).toContain("tags: Schema.Array(Schema.String),");
+    // Relations and Unsupported(...) columns have no row representation.
+    expect(generated).not.toContain("posts");
+    expect(generated).not.toContain("account:");
+    expect(generated).not.toContain("vector");
+    // schemaOutput lives one directory below output, so the relative
+    // clientImportPath must be re-based for the Decimal import.
+    expect(generated).toContain('import { Prisma } from "../client"');
+    expect(generated).toContain("balance: Schema.instanceOf(Prisma.Decimal),");
+  });
+
+  it("emits no schemas file when schemaOutput is not configured", () => {
+    expect(fs.existsSync("no-typedsql/generated/schemas.ts")).toBe(false);
+  });
 
   it("should reject clients missing this schema's model delegates at compile time", () => {
     const wrongShapeClient = {
