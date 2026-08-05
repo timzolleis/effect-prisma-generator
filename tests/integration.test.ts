@@ -184,8 +184,8 @@ describe("Prisma Effect Generator", () => {
       const matches = yield* prisma.user.findMany({ where: filter });
       expect(matches.map((user) => user.email)).toEqual([selfNamed]);
 
-      // Refs are read off the base client at layer construction; inside a
-      // transaction they must still resolve against the transaction client.
+      // The filter captured a base-client ref; the query below runs on the
+      // transaction client, and the ref must still match there.
       const inTransaction = yield* prisma.$transaction(
         prisma.user.findMany({ where: filter }),
       );
