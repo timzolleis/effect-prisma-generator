@@ -180,6 +180,20 @@ const program = Effect.gen(function* () {
 
 The generated `PrismaService` mirrors your Prisma Client API but returns `Effect<SpecificPrismaResultType, PrismaError, never>` instead of Promises, where `PrismaError` is a specific union type based on the operation (e.g., `PrismaCreateError`, `PrismaUpdateError`, `PrismaFindError`).
 
+### Field References
+
+Each model exposes Prisma's `fields` markers, so a filter can compare two columns of the same model instead of dropping to `$queryRaw`:
+
+```typescript
+const staleAbsences = Effect.gen(function* () {
+  const prisma = yield* PrismaService;
+
+  return yield* prisma.absence.findMany({
+    where: { updatedAt: { gt: prisma.absence.fields.reconciledAt } },
+  });
+});
+```
+
 ### Error Handling
 
 All operations return an `Effect` that can fail with specific Prisma errors. The generator maps Prisma's error codes to typed Effect errors.

@@ -280,7 +280,13 @@ function generateModelOperations(
         emitOperation("aggregate", "mapFindError"),
       ].join("");
 
+      // Field references (client.<model>.fields) are inert markers used to
+      // compare two columns of the same model in a filter; they touch no
+      // connection, so they pass through as a plain value rather than an
+      // Effect. Reading them off the base client is correct even inside a
+      // transaction — a transaction client carries the identical refs.
       return `    ${modelNameCamel}: {
+      fields: client.${modelNameCamel}.fields,
 ${operations}
       // groupBy's input validation (having/orderBy fields must appear in "by")
       // is expressed by the shared GroupBy* helpers, since Prisma.Args cannot
