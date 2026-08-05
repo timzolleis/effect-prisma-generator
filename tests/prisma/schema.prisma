@@ -12,6 +12,7 @@ generator effect {
   provider         = "node ../dist/index.js"
   output           = "./generated/effect.ts"
   clientImportPath = "./client"
+  schemaOutput     = "./generated/schemas.ts"
 }
 
 model User {
@@ -36,6 +37,22 @@ model Post {
 model Embedding {
   id     Int                   @id @default(autoincrement())
   vector Unsupported("vector")
+}
+
+// Every scalar type sqlite supports, for row-schema decode coverage against
+// real client return values (enums are postgres-only — see the
+// postgres-schemas fixture).
+model Scalars {
+  id      Int      @id @default(autoincrement())
+  text    String
+  flag    Boolean
+  num     Float
+  dec     Decimal
+  big     BigInt
+  bytes   Bytes
+  json    Json
+  at      DateTime @default(now())
+  optText String?
 }
 
 // snake_case model name: regression coverage for first-letter-capitalized Prisma types

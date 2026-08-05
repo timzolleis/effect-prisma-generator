@@ -1,0 +1,53 @@
+// Generation-only fixture (no database): sqlite has no enums, so the
+// enum-schema emission and the full postgres scalar matrix are covered here.
+// noCheck = "false" so the suite's `tsc --noEmit` type-checks the emitted
+// output as-is.
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client"
+  output   = "./generated"
+}
+
+generator effect {
+  provider         = "node ../../dist/index.js"
+  output           = "./generated/effect.ts"
+  clientImportPath = "./client"
+  // schemaOutput in a different directory than output: exercises the
+  // clientImportPath re-basing for the Decimal import.
+  schemaOutput = "./generated/schemas/schemas.ts"
+  noCheck      = "false"
+}
+
+enum Role {
+  admin
+  member
+  guest
+}
+
+model Account {
+  id        String                @id @default(uuid())
+  role      Role
+  altRole   Role?
+  createdAt DateTime              @default(now())
+  deletedAt DateTime?
+  balance   Decimal
+  tags      String[]
+  scores    Int[]
+  meta      Json
+  optMeta   Json?
+  big       BigInt
+  bytes     Bytes
+  ratio     Float
+  active    Boolean
+  vector    Unsupported("vector")
+  posts     Entry[]
+}
+
+model Entry {
+  id        Int     @id @default(autoincrement())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+}

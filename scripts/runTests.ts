@@ -53,6 +53,10 @@ const program = Effect.gen(function* () {
   }
   yield* run("./tests", "prisma", "generate", "--sql");
   yield* run("./tests/no-typedsql", "prisma", "generate");
+  // Generation-only postgres fixture (enums + full scalar matrix for the
+  // emitted row schemas); its noCheck = "false" output is type-checked by the
+  // tsc --noEmit step below via the tests tsconfig's `**/*` include.
+  yield* run("./tests/postgres-schemas", "prisma", "generate");
   // tsc has no flag to override `// @ts-nocheck`, so the suppressed default
   // output would go unchecked. Type-check a copy with the directive stripped,
   // placed next to the original so its relative imports still resolve; the

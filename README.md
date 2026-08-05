@@ -8,6 +8,7 @@ A Prisma generator that creates a fully-typed, Effect-based service wrapper for 
 - 🛡️ **Type Safety**: Full TypeScript support with generated types matching your Prisma schema.
 - 🧩 **Dependency Injection**: Integrates seamlessly with Effect's `Layer` and `Context` system.
 - 🔍 **Error Handling**: Automatically catches and wraps Prisma errors into specific typed Effect errors.
+- 📋 **Row Schemas (opt-in)**: Emits `effect/Schema` structs for your models and enums, generated from the Prisma schema.
 
 ## Installation
 
@@ -275,6 +276,74 @@ const program = Effect.gen(function* () {
   );
 });
 ```
+
+## Generated Effect Schemas
+
+Opt in by adding `schemaOutput` to the generator block:
+
+```prisma
+generator effect {
+  provider         = "effect-prisma-generator"
+  output           = "./generated/effect.ts"
+  clientImportPath = "./client"
+  schemaOutput     = "./generated/schemas.ts" // relative to the schema.prisma file
+}
+```
+
+`prisma generate` then also emits one `Schema.Struct` per model (named
+`<Model>Row`) and one schema per enum (named like the enum), plus matching
+`export type` aliases:
+
+```typescript
+export const Role = Schema.Literals(["admin", "member"]);
+export type Role = typeof Role.Type;
+
+export const UserRow = Schema.Struct({
+  id: Schema.Int,
+  email: Schema.String,
+  name: Schema.NullOr(Schema.String),
+  role: Role,
+});
+export type UserRow = typeof UserRow.Type;
+```
+
+The schemas validate what the Prisma client **returns at runtime** (`Date`
+instances, `bigint`, `Uint8Array`, `Prisma.Decimal`) — they are decode-side row
+schemas, not wire formats.
+
+| Prisma type    | Effect v3                           | Effect v4                           |
+| -------------- | ----------------------------------- | ----------------------------------- |
+| `String`       | `Schema.String`                     | `Schema.String`                     |
+| `Boolean`      | `Schema.Boolean`                    | `Schema.Boolean`                    |
+| `Int`          | `Schema.Int`                        | `Schema.Int`                        |
+| `Float`        | `Schema.Number`                     | `Schema.Number`                     |
+| `DateTime`     | `Schema.DateFromSelf`               | `Schema.Date`                       |
+| `BigInt`       | `Schema.BigIntFromSelf`             | `Schema.BigInt`                     |
+| `Bytes`        | `Schema.Uint8ArrayFromSelf`         | `Schema.Uint8Array`                 |
+| `Json`         | `Schema.Unknown`                    | `Schema.Unknown`                    |
+| `Decimal`      | `Schema.instanceOf(Prisma.Decimal)` | `Schema.instanceOf(Prisma.Decimal)` |
+| enum           | `Schema.Literal(...)`               | `Schema.Literals([...])`            |
+| optional field | `Schema.NullOr(...)`                | `Schema.NullOr(...)`                |
+| list field     | `Schema.Array(...)`                 | `Schema.Array(...)`                 |
+
+**Scalars only — compose relations yourself.** A relation's shape depends on
+each query's `include`/`select`, so relation fields (and `Unsupported(...)`
+columns) are not part of the emitted structs. Compose them at the call site:
+
+```typescript
+import { Schema } from "effect";
+import { PostRow, UserRow } from "~prisma/schemas";
+
+// The shape of `user.findMany({ include: { posts: true } })` rows:
+const UserWithPosts = Schema.Struct({
+  ...UserRow.fields,
+  posts: Schema.Array(PostRow),
+});
+```
+
+This replaces hand-mirrored row schemas in your repositories: renamed or
+retyped columns show up as type errors, and newly added columns appear in the
+generated file's diff at `prisma generate` instead of being silently invisible.
 
 ## Development
 

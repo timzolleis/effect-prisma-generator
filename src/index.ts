@@ -2,8 +2,9 @@
 import type { GeneratorOptions } from "@prisma/generator";
 import { DMMF, generatorHandler } from "@prisma/generator-helper";
 import fs from "fs/promises";
-import { readFileSync } from "fs";
 import path from "path";
+import { determineEffectMajor, type EffectMajor } from "./effect-major";
+import { generateSchemas, rebaseImportPath } from "./schemas";
 
 // The suppression directives exempt the generated implementation from type
 // checking and linting, mirroring Prisma's own generated client header.
@@ -22,52 +23,6 @@ function headerFor(noCheck: boolean) {
 // Utility function to convert PascalCase to camelCase
 function toCamelCase(str: string) {
   return str.charAt(0).toLowerCase() + str.slice(1);
-}
-
-// The major version of `effect` the generated code targets. v3 and v4 differ in
-// their service/runtime APIs (see `variantsFor`), so the generator emits code
-// matching whichever `effect` the consuming project has installed.
-type EffectMajor = 3 | 4;
-
-// Extract the supported EffectMajor from a version-ish string ("4.0.0-beta.83",
-// "^3.19", "10"). Reads the first run of digits as the major, so multi-digit
-// majors parse correctly; only a leading major of 4+ selects v4. Anything that
-// doesn't parse to >= 4 — including malformed values — falls back to v3, the
-// long-standing stable line.
-function majorOf(version: string): EffectMajor {
-  return Number(version.match(/\d+/)?.[0]) >= 4 ? 4 : 3;
-}
-
-// Resolve the consuming project's installed `effect` major version. Returns
-// `undefined` when `effect` can't be resolved, so callers can fall back.
-function resolveEffectMajor(searchPaths: string[]): EffectMajor | undefined {
-  try {
-    // require.resolve is the reliable way to find the consumer's installed
-    // effect from this CommonJS generator; the JSON is then read with fs.
-    const pkgPath = require.resolve("effect/package.json", {
-      paths: searchPaths,
-    });
-    const version: string = JSON.parse(readFileSync(pkgPath, "utf8")).version;
-    return majorOf(version);
-  } catch {
-    return undefined;
-  }
-}
-
-// Decide which effect major to target: an explicit `effectVersion` config wins,
-// otherwise auto-detect from the consumer's installed `effect`, otherwise fall
-// back to v3.
-function determineEffectMajor(
-  configVersion: string | string[] | undefined,
-  searchPaths: string[],
-): EffectMajor {
-  const explicit = Array.isArray(configVersion)
-    ? configVersion[0]
-    : configVersion;
-  if (typeof explicit === "string" && explicit.trim() !== "") {
-    return majorOf(explicit);
-  }
-  return resolveEffectMajor(searchPaths) ?? 3;
 }
 
 // Prisma passes generator config values as strings (or string arrays for
@@ -149,6 +104,38 @@ generatorHandler({
       effectMajor,
       noCheck,
     );
+
+    const schemaOutput = options.generator.config.schemaOutput;
+    if (schemaOutput !== undefined) {
+      if (Array.isArray(schemaOutput)) {
+        throw new Error(
+          "effect-prisma-generator: schemaOutput must be a string. Array given.",
+        );
+      }
+      if (!schemaOutput.toLowerCase().endsWith(".ts")) {
+        throw new Error(
+          "effect-prisma-generator: schemaOutput must be a ts file",
+        );
+      }
+      // Custom config values arrive unresolved; resolve like Prisma resolves
+      // `output` — against the schema file holding the generator block.
+      const schemaOutputPath = path.resolve(
+        path.dirname(options.generator.sourceFilePath),
+        schemaOutput,
+      );
+      await generateSchemas(
+        [...models],
+        [...options.dmmf.datamodel.enums],
+        schemaOutputPath,
+        rebaseImportPath(
+          clientImportPath,
+          outputDir,
+          path.dirname(schemaOutputPath),
+        ),
+        effectMajor,
+        headerFor(noCheck),
+      );
+    }
   },
 });
 

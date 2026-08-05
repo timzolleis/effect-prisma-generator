@@ -7,6 +7,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { Effect } from "effect";
 import { PrismaService } from "./prisma/generated/effect";
+import { UserRow } from "./prisma/generated/schemas";
 
 const serviceEffect = Effect.gen(function* () {
   return yield* PrismaService;
@@ -242,6 +243,15 @@ const _typeAssertions = () => {
   expectTypeOf<Ok<typeof distinctPosts>>().toEqualTypeOf<
     Array<{ authorId: number }>
   >();
+
+  // Emitted row schema: its Type is the model's scalar payload (readonly, as
+  // Schema.Struct produces on both effect majors) — the shape consumers
+  // compose with relations and decode client results into.
+  expectTypeOf<typeof UserRow.Type>().toEqualTypeOf<{
+    readonly id: number;
+    readonly email: string;
+    readonly name: string | null;
+  }>();
 };
 
 describe("generated service type contract", () => {
