@@ -478,6 +478,31 @@ describe("Prisma Effect Generator", () => {
     ),
   );
 
+  it.effect("should not touch delegates while building the layer", () =>
+    Effect.gen(function* () {
+      const service = yield* PrismaService;
+      const users = yield* service.user.findMany({});
+      expect(users).toEqual([{ id: 1, email: "a@b.c", name: null }]);
+    }).pipe(
+      Effect.provide(
+        Layer.provide(
+          serviceLayer,
+          // Test doubles usually stub only the models under test, so building
+          // the service must read nothing off the client — `fields` is a
+          // getter for exactly this reason.
+          layerFromPrismaClient({
+            $transaction: async () => undefined,
+            $queryRaw: async () => undefined,
+            $executeRaw: async () => undefined,
+            user: {
+              findMany: async () => [{ id: 1, email: "a@b.c", name: null }],
+            },
+          } as unknown as PrismaClient),
+        ),
+      ),
+    ),
+  );
+
   it("should reject clients missing this schema's model delegates at compile time", () => {
     const wrongShapeClient = {
       $transaction: async () => undefined,
