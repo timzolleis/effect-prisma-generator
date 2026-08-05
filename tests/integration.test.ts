@@ -164,6 +164,39 @@ describe("Prisma Effect Generator", () => {
     }).pipe(Effect.provide(MainLayer)),
   );
 
+  it.effect("should filter by a field reference", () =>
+    Effect.gen(function* () {
+      const prisma = yield* PrismaService;
+      const marker = `fieldref-${Date.now()}`;
+      const selfNamed = `${marker}-self@example.com`;
+      yield* prisma.user.create({
+        data: { email: selfNamed, name: selfNamed },
+      });
+      yield* prisma.user.create({
+        data: { email: `${marker}-other@example.com`, name: "someone else" },
+      });
+
+      const filter = {
+        email: { startsWith: marker },
+        name: { equals: prisma.user.fields.email },
+      };
+
+      const matches = yield* prisma.user.findMany({ where: filter });
+      expect(matches.map((user) => user.email)).toEqual([selfNamed]);
+
+      // Refs are read off the base client at layer construction; inside a
+      // transaction they must still resolve against the transaction client.
+      const inTransaction = yield* prisma.$transaction(
+        prisma.user.findMany({ where: filter }),
+      );
+      expect(inTransaction.map((user) => user.email)).toEqual([selfNamed]);
+
+      yield* prisma.user.deleteMany({
+        where: { email: { startsWith: marker } },
+      });
+    }).pipe(Effect.provide(MainLayer)),
+  );
+
   it.effect("should support transactions", () =>
     Effect.gen(function* () {
       const prisma = yield* PrismaService;

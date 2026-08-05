@@ -8,6 +8,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import { Effect } from "effect";
 import { PrismaService } from "./prisma/generated/effect";
 import { UserRow } from "./prisma/generated/schemas";
+import type { Prisma } from "./prisma/generated/client";
 
 const serviceEffect = Effect.gen(function* () {
   return yield* PrismaService;
@@ -232,6 +233,15 @@ const _typeAssertions = () => {
   const widenedArgs = { where: { email: "x" }, bogus: true };
   // @ts-expect-error - excess property survives widening
   service.user.findMany(widenedArgs);
+
+  // Field references pass through with the delegate's own type, so a
+  // column-to-column compare type-checks and mismatched types don't.
+  expectTypeOf(service.user.fields).toEqualTypeOf<Prisma.UserFieldRefs>();
+  service.user.findMany({
+    where: { name: { equals: service.user.fields.email } },
+  });
+  // @ts-expect-error - String ref in an Int filter
+  service.user.findMany({ where: { id: { gt: service.user.fields.email } } });
 
   // distinct + orderBy + take don't perturb the result type
   const distinctPosts = service.post.findMany({
