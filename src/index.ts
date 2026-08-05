@@ -271,7 +271,8 @@ function generateModelOperations(
       // compare two columns of the same model in a filter; they touch no
       // connection, so they pass through as a plain value rather than an
       // Effect. Reading them off the base client is correct even inside a
-      // transaction — a transaction client carries the identical refs.
+      // transaction: a ref only names a column, and a transaction client's own
+      // refs are equivalent values (separate objects, same contents).
       return `    ${modelNameCamel}: {
       fields: client.${modelNameCamel}.fields,
 ${operations}
