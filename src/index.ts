@@ -273,8 +273,11 @@ function generateModelOperations(
       // Effect. Reading them off the base client is correct even inside a
       // transaction: a ref only names a column, and a transaction client's own
       // refs are equivalent values (separate objects, same contents).
+      // A getter, not a property: a property would touch every model delegate
+      // while building the layer, which breaks partial test doubles that only
+      // stub the models they use.
       return `    ${modelNameCamel}: {
-      fields: client.${modelNameCamel}.fields,
+      get fields(): typeof client.${modelNameCamel}.fields { return client.${modelNameCamel}.fields },
 ${operations}
       // groupBy's input validation (having/orderBy fields must appear in "by")
       // is expressed by the shared GroupBy* helpers, since Prisma.Args cannot
